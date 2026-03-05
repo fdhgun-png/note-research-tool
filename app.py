@@ -3,24 +3,25 @@ import datetime
 import streamlit as st
 import pandas as pd
 
-from scraper import search_notes, debug_api_response
+from scraper import search_notes, debug_search_page
 from estimator import estimate_min_sales
 
 st.set_page_config(page_title="売れてるnoteリサーチツール", page_icon="📊", layout="wide")
 st.title("📊 売れてるnoteリサーチツール")
 
 # --- APIレスポンス確認（常に表示） ---
-with st.expander("🔧 APIレスポンス確認"):
-    if st.button("APIテスト実行（キーワード: 副業）"):
-        with st.spinner("APIにアクセス中..."):
-            debug_resp = debug_api_response("副業")
-        st.write(f"**ステータスコード:** {debug_resp.get('status_code')}")
-        if debug_resp.get("error"):
-            st.error(f"エラー: {debug_resp['error']}")
-        if debug_resp.get("json"):
-            st.json(debug_resp["json"])
-        else:
-            st.warning("レスポンスJSONが取得できませんでした")
+with st.expander("🔧 検索ページ動作確認"):
+    if st.button("テスト実行（キーワード: 副業）"):
+        with st.spinner("検索ページにアクセス中..."):
+            debug = debug_search_page("副業")
+        st.write(f"**HTTPステータスコード:** {debug.get('status_code')}")
+        st.write(f"**HTML長さ:** {debug.get('html_length')} 文字")
+        st.write(f"**__NUXT__データ有無:** {debug.get('has_nuxt_data')}")
+        st.write(f"**検出カード数:** {debug.get('card_count')}")
+        if debug.get("error"):
+            st.error(f"エラー: {debug['error']}")
+        if debug.get("html_preview"):
+            st.text_area("HTML先頭2000文字", debug["html_preview"], height=200)
 
 # --- 入力フォーム ---
 with st.form("search_form"):
@@ -67,8 +68,8 @@ if submitted:
 
         # result が dict でない場合の安全対策
         if not isinstance(result, dict):
-            st.error(f"予期しない戻り値の型: {type(result)}")
-            st.stop()
+            st.error(f"予期しない戻り値: type={type(result)}")
+            result = {"articles": [], "skipped": 0}
 
         articles = result.get("articles", [])
         skipped = result.get("skipped", 0)
@@ -77,39 +78,37 @@ if submitted:
         if result.get("error"):
             st.error(f"処理中にエラーが発生しました: {result['error']}")
 
-        # --- デバッグ情報 ---
-        with st.expander("🔧 デバッグ情報"):
-            st.write(f"**APIステータスコード:** {result.get('api_status')}")
-            st.write(f"**Step1 取得記事数:** {result.get('step1_count', 0)}件")
-            st.write(f"**フィルタリング前件数:** {result.get('pre_filter_count', 0)}件")
-            st.write(f"**フィルタリング後件数:** {result.get('post_filter_count', 0)}件")
-            st.write(f"**高評価数取得スキップ数:** {skipped}件")
+        # --- デバッグ情報（常に表示） ---
+        with st.expander("🔧 デバッグ情報", expanded=(len(articles) == 0)):
+            st.subheader("Step1: 記事一覧取得")
+            st.write(f"**検索ページ HTTPステータス:** {result.get('step1_status')}")
+            st.write(f"**検出カード数（全ページ合計）:** {result.get('step1_card_count', 0)}")
+            st.write(f"**パース済み記事数:** {result.get('step1_article_count', 0)}")
 
+            html_preview = result.get("step1_html_preview", "")
+            if html_preview:
+                st.text_area("取得したHTMLの先頭2000文字", html_preview, height=150)
+
+            st.subheader("Step2: 高評価数取得")
             step2_debug = result.get("step2_debug", [])
             if step2_debug:
-                st.write("**Step2 各記事の高評価数:**")
+                st.write(f"**処理記事数:** {len(step2_debug)}")
+                st.write(f"**取得失敗数:** {skipped}")
                 debug_df = pd.DataFrame(step2_debug)
                 st.dataframe(debug_df, use_container_width=True, hide_index=True)
 
-            first_resp = result.get("first_response")
-            if first_resp:
-                st.write("**検索APIレスポンス（先頭1件）:**")
-                try:
-                    st.json(first_resp)
-                except Exception:
-                    st.write("レスポンスの表示に失敗しました")
+            first_art = result.get("step2_first_article")
+            if first_art:
+                st.write("**最初の記事ページの詳細:**")
+                st.write(f"- HTTPステータス: {first_art.get('status_code')}")
+                st.write(f"- scriptタグ内JSON検出: {first_art.get('found_json')}")
+                st.write(f"- 「人が高評価」テキスト検出: {first_art.get('found_text')}")
+                st.write(f"- 取得した高評価数: {first_art.get('rating')}")
+                st.write(f"- 取得方法: {first_art.get('method')}")
 
-            first_art_api = result.get("first_article_api")
-            if first_art_api:
-                st.write("**記事個別APIレスポンス（先頭1件）:**")
-                try:
-                    st.write(f"ステータス: {first_art_api.get('status_code')}")
-                    if first_art_api.get("json"):
-                        st.json(first_art_api["json"])
-                    if first_art_api.get("error"):
-                        st.write(f"エラー: {first_art_api['error']}")
-                except Exception:
-                    st.write("レスポンスの表示に失敗しました")
+            st.subheader("フィルタリング")
+            st.write(f"**フィルタ前:** {result.get('pre_filter_count', 0)}件")
+            st.write(f"**フィルタ後:** {result.get('post_filter_count', 0)}件")
 
         if skipped > 0:
             st.warning(f"⚠️ {skipped}件の記事で高評価数の取得に失敗しました。")
