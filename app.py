@@ -1,14 +1,7 @@
-import subprocess
-import os
 import datetime
 
 import streamlit as st
 import pandas as pd
-
-# Playwright ブラウザの自動インストール
-playwright_cache = os.path.expanduser("~/.cache/ms-playwright")
-if not os.path.exists(playwright_cache):
-    subprocess.run(["playwright", "install", "chromium"], check=True)
 
 from scraper import search_notes
 from estimator import estimate_min_sales
@@ -46,7 +39,7 @@ if submitted:
 
         with st.spinner("noteからデータ取得中..."):
             try:
-                articles, skipped, used_fallback = search_notes(
+                articles, skipped = search_notes(
                     keyword=keyword.strip(),
                     max_count=int(max_count),
                     min_high_rating=int(min_high_rating),
@@ -59,9 +52,6 @@ if submitted:
 
         progress_bar.progress(1.0)
         status_text.empty()
-
-        if used_fallback:
-            st.info("非公式APIが利用できなかったため、ブラウザ経由でデータを取得しました。一部情報が欠落している可能性があります。")
 
         if skipped > 0:
             st.warning(f"⚠️ {skipped}件の記事で高評価数の取得に失敗しました（高評価数=0として処理）。")

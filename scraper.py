@@ -1,7 +1,12 @@
 import re
 import time
 import requests
-from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+}
 
 
 def fetch_paid_articles_api(keyword: str, max_count: int = 50, progress_callback=None):
@@ -26,9 +31,9 @@ def fetch_paid_articles_api(keyword: str, max_count: int = 50, progress_callback
             f"?context=note_for_sale&q={keyword}&size={size}&start={offset}"
         )
         try:
-            resp = requests.get(url, timeout=15)
+            resp = requests.get(url, headers=HEADERS, timeout=15)
             if resp.status_code != 200:
-                return None  # APIエラー → フォールバックへ
+                return None
 
             data = resp.json()
             notes = data.get("data", {}).get("notes", {}).get("items", [])
@@ -63,87 +68,86 @@ def fetch_paid_articles_api(keyword: str, max_count: int = 50, progress_callback
     return articles
 
 
-def fetch_paid_articles_playwright(keyword: str, max_count: int = 50, progress_callback=None):
+def _find_rating_in_json(data, depth=0):
     """
-    Playwrightでnote検索ページから有料記事一覧を取得する（フォールバック）。
-
-    Args:
-        keyword: 検索キーワード
-        max_count: 最大取得件数
-        progress_callback: 進捗コールバック (current, total)
-
-    Returns:
-        記事リスト
+    JSONレスポンス内を再帰探索し、高評価数に相当するフィールドを探す。
+    "recommend", "rating", "evaluation" などのキーを持つ数値フィールドを返す。
     """
-    articles = []
+    if depth > 10:
+        return None
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    rating_keywords = ["recommend", "rating", "evaluation", "highrating", "high_rating"]
 
-        try:
-            search_url = f"https://note.com/search?q={keyword}&context=note_for_sale"
-            page.goto(search_url, wait_until="networkidle", timeout=30000)
-            time.sleep(3)
+    if isinstance(data, dict):
+        for key, value in data.items():
+            key_lower = key.lower()
+            # キー名に高評価関連の文字列が含まれ、値が数値の場合
+            if any(kw in key_lower for kw in rating_keywords) and isinstance(value, (int, float)):
+                return int(value)
+            # 再帰探索
+            result = _find_rating_in_json(value, depth + 1)
+            if result is not None:
+                return result
+    elif isinstance(data, list):
+        for item in data:
+            result = _find_rating_in_json(item, depth + 1)
+            if result is not None:
+                return result
 
-            # スクロールして記事を読み込む
-            prev_count = 0
-            scroll_attempts = 0
-            max_scroll_attempts = 20
+    return None
 
-            while len(articles) < max_count and scroll_attempts < max_scroll_attempts:
-                # 記事要素を取得
-                note_elements = page.query_selector_all('a[href*="/n/"]')
 
-                for elem in note_elements:
-                    if len(articles) >= max_count:
-                        break
+def _fetch_high_rating_from_html(article_url: str) -> int | None:
+    """
+    記事ページのHTMLから「◯人が高評価」テキストを探す。
+    """
+    try:
+        resp = requests.get(article_url, headers=HEADERS, timeout=15)
+        if resp.status_code != 200:
+            return None
 
-                    href = elem.get_attribute("href") or ""
-                    if "/n/" not in href:
-                        continue
+        soup = BeautifulSoup(resp.text, "html.parser")
+        text = soup.get_text()
+        match = re.search(r"(\d+)人が高評価", text)
+        if match:
+            return int(match.group(1))
 
-                    # 重複チェック
-                    full_url = f"https://note.com{href}" if href.startswith("/") else href
-                    if any(a["url"] == full_url for a in articles):
-                        continue
+        # HTML属性やscriptタグ内も検索
+        match = re.search(r"(\d+)人が高評価", resp.text)
+        if match:
+            return int(match.group(1))
 
-                    title = elem.inner_text().strip()
-                    if not title:
-                        continue
+    except requests.RequestException:
+        return None
 
-                    articles.append({
-                        "title": title,
-                        "url": full_url,
-                        "price": 0,
-                        "like_count": 0,
-                        "author": "",
-                        "key": "",
-                    })
+    return None
 
-                if progress_callback:
-                    progress_callback(len(articles), max_count)
 
-                if len(articles) == prev_count:
-                    scroll_attempts += 1
-                else:
-                    scroll_attempts = 0
-                prev_count = len(articles)
+def _fetch_high_rating_from_api(article_key: str) -> int | None:
+    """
+    記事個別の非公式APIから高評価数に相当するフィールドを探す。
+    """
+    if not article_key:
+        return None
 
-                page.evaluate("window.scrollBy(0, 1000)")
-                time.sleep(2)
+    api_url = f"https://note.com/api/v3/notes/{article_key}"
+    try:
+        resp = requests.get(api_url, headers=HEADERS, timeout=15)
+        if resp.status_code != 200:
+            return None
 
-        except Exception:
-            pass
-        finally:
-            browser.close()
+        data = resp.json()
+        return _find_rating_in_json(data)
 
-    return articles[:max_count]
+    except (requests.RequestException, ValueError):
+        return None
 
 
 def fetch_high_ratings(articles: list, progress_callback=None):
     """
-    各記事ページにアクセスし、高評価数を取得する。
+    各記事の高評価数を取得する。
+    1. まずHTMLページから「◯人が高評価」を探す
+    2. 取得できなければ記事個別APIから高評価関連フィールドを探す
 
     Args:
         articles: 記事リスト
@@ -155,33 +159,25 @@ def fetch_high_ratings(articles: list, progress_callback=None):
     skipped = 0
     total = len(articles)
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    for i, article in enumerate(articles):
+        try:
+            # 方法1: HTMLから取得
+            rating = _fetch_high_rating_from_html(article["url"])
 
-        for i, article in enumerate(articles):
-            try:
-                page.goto(article["url"], wait_until="networkidle", timeout=30000)
-                time.sleep(1)
+            # 方法2: 個別APIから取得
+            if rating is None:
+                rating = _fetch_high_rating_from_api(article.get("key", ""))
 
-                # 「◯人が高評価」テキストを検索
-                content = page.content()
-                match = re.search(r"(\d+)人が高評価", content)
-                if match:
-                    article["high_rating"] = int(match.group(1))
-                else:
-                    article["high_rating"] = 0
+            article["high_rating"] = rating if rating is not None else 0
 
-            except Exception:
-                article["high_rating"] = 0
-                skipped += 1
+        except Exception:
+            article["high_rating"] = 0
+            skipped += 1
 
-            if progress_callback:
-                progress_callback(i + 1, total, skipped)
+        if progress_callback:
+            progress_callback(i + 1, total, skipped)
 
-            time.sleep(2)
-
-        browser.close()
+        time.sleep(1)
 
     return articles, skipped
 
@@ -199,18 +195,16 @@ def search_notes(keyword: str, max_count: int = 50, min_high_rating: int = 5,
         step2_progress: Step2進捗コールバック
 
     Returns:
-        (フィルタ済み記事リスト, スキップ数, APIフォールバック使用フラグ)
+        (フィルタ済み記事リスト, スキップ数)
     """
     # Step 1: 有料記事一覧を取得
     articles = fetch_paid_articles_api(keyword, max_count, step1_progress)
-    used_fallback = False
 
     if articles is None:
-        used_fallback = True
-        articles = fetch_paid_articles_playwright(keyword, max_count, step1_progress)
+        return [], 0
 
     if not articles:
-        return [], 0, used_fallback
+        return [], 0
 
     # Step 2: 高評価数を取得
     articles, skipped = fetch_high_ratings(articles, step2_progress)
@@ -221,4 +215,4 @@ def search_notes(keyword: str, max_count: int = 50, min_high_rating: int = 5,
     # 高評価数の降順でソート
     filtered.sort(key=lambda x: x.get("high_rating", 0), reverse=True)
 
-    return filtered, skipped, used_fallback
+    return filtered, skipped
