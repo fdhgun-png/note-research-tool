@@ -1,14 +1,26 @@
 import datetime
-import json
 
 import streamlit as st
 import pandas as pd
 
-from scraper import search_notes
+from scraper import search_notes, debug_api_response
 from estimator import estimate_min_sales
 
 st.set_page_config(page_title="売れてるnoteリサーチツール", page_icon="📊", layout="wide")
 st.title("📊 売れてるnoteリサーチツール")
+
+# --- APIレスポンス確認（常に表示） ---
+with st.expander("🔧 APIレスポンス確認"):
+    if st.button("APIテスト実行（キーワード: 副業）"):
+        with st.spinner("APIにアクセス中..."):
+            debug_resp = debug_api_response("副業")
+        st.write(f"**ステータスコード:** {debug_resp.get('status_code')}")
+        if debug_resp.get("error"):
+            st.error(f"エラー: {debug_resp['error']}")
+        if debug_resp.get("json"):
+            st.json(debug_resp["json"])
+        else:
+            st.warning("レスポンスJSONが取得できませんでした")
 
 # --- 入力フォーム ---
 with st.form("search_form"):
@@ -48,39 +60,54 @@ if submitted:
                     step2_progress=step2_progress,
                 )
             except Exception as e:
-                st.error("noteのAPIに接続できません。時間をおいて再度お試しください。")
-                st.stop()
+                result = {"articles": [], "skipped": 0, "error": str(e)}
 
         progress_bar.progress(1.0)
         status_text.empty()
 
-        articles = result["articles"]
-        skipped = result["skipped"]
+        # result が dict でない場合の安全対策
+        if not isinstance(result, dict):
+            st.error(f"予期しない戻り値の型: {type(result)}")
+            st.stop()
+
+        articles = result.get("articles", [])
+        skipped = result.get("skipped", 0)
+
+        # エラーがあれば表示
+        if result.get("error"):
+            st.error(f"処理中にエラーが発生しました: {result['error']}")
 
         # --- デバッグ情報 ---
         with st.expander("🔧 デバッグ情報"):
-            st.write(f"**APIステータスコード:** {result['api_status']}")
-            st.write(f"**Step1 取得記事数:** {result['step1_count']}件")
-            st.write(f"**フィルタリング前件数:** {result['pre_filter_count']}件")
-            st.write(f"**フィルタリング後件数:** {result['post_filter_count']}件")
+            st.write(f"**APIステータスコード:** {result.get('api_status')}")
+            st.write(f"**Step1 取得記事数:** {result.get('step1_count', 0)}件")
+            st.write(f"**フィルタリング前件数:** {result.get('pre_filter_count', 0)}件")
+            st.write(f"**フィルタリング後件数:** {result.get('post_filter_count', 0)}件")
             st.write(f"**高評価数取得スキップ数:** {skipped}件")
 
-            if result["step2_debug"]:
+            step2_debug = result.get("step2_debug", [])
+            if step2_debug:
                 st.write("**Step2 各記事の高評価数:**")
-                debug_df = pd.DataFrame(result["step2_debug"])
+                debug_df = pd.DataFrame(step2_debug)
                 st.dataframe(debug_df, use_container_width=True, hide_index=True)
 
-            if result["first_response"]:
-                st.write("**最初のAPIレスポンス（先頭1件）:**")
+            first_resp = result.get("first_response")
+            if first_resp:
+                st.write("**検索APIレスポンス（先頭1件）:**")
                 try:
-                    first_resp = result["first_response"]
-                    # notes_for_sale の先頭1件だけ表示
-                    contents = first_resp.get("data", {}).get("notes_for_sale", {}).get("contents", [])
-                    if contents:
-                        st.json(contents[0])
-                    else:
-                        # 構造がまだ違う場合は全体を表示
-                        st.json(first_resp.get("data", {}))
+                    st.json(first_resp)
+                except Exception:
+                    st.write("レスポンスの表示に失敗しました")
+
+            first_art_api = result.get("first_article_api")
+            if first_art_api:
+                st.write("**記事個別APIレスポンス（先頭1件）:**")
+                try:
+                    st.write(f"ステータス: {first_art_api.get('status_code')}")
+                    if first_art_api.get("json"):
+                        st.json(first_art_api["json"])
+                    if first_art_api.get("error"):
+                        st.write(f"エラー: {first_art_api['error']}")
                 except Exception:
                     st.write("レスポンスの表示に失敗しました")
 
@@ -93,33 +120,31 @@ if submitted:
         else:
             st.success(f"🎯 高評価{int(min_high_rating)}以上の記事: {len(articles)}件")
 
-            # 売上予測を計算
             rows = []
             for a in articles:
                 hr = a.get("high_rating")
                 if hr is not None and hr > 0:
-                    est = estimate_min_sales(a["price"], hr)
+                    est = estimate_min_sales(a.get("price", 0), hr)
                     rows.append({
-                        "タイトル": a["title"],
-                        "著者": a["author"],
-                        "価格": a["price"],
+                        "タイトル": a.get("title", ""),
+                        "著者": a.get("author", ""),
+                        "価格": a.get("price", 0),
                         "高評価数": hr,
                         "推定購入者数": est["estimated_buyers"],
                         "最低売上予測": est["estimated_sales"],
-                        "スキ数": a["like_count"],
-                        "記事URL": a["url"],
+                        "スキ数": a.get("like_count", 0),
+                        "記事URL": a.get("url", ""),
                     })
                 else:
-                    # 高評価数が取得不可の記事
                     rows.append({
-                        "タイトル": a["title"],
-                        "著者": a["author"],
-                        "価格": a["price"],
+                        "タイトル": a.get("title", ""),
+                        "著者": a.get("author", ""),
+                        "価格": a.get("price", 0),
                         "高評価数": "取得不可" if hr is None else hr,
                         "推定購入者数": "-",
                         "最低売上予測": "-",
-                        "スキ数": a["like_count"],
-                        "記事URL": a["url"],
+                        "スキ数": a.get("like_count", 0),
+                        "記事URL": a.get("url", ""),
                     })
 
             df = pd.DataFrame(rows)
@@ -133,7 +158,6 @@ if submitted:
                 hide_index=True,
             )
 
-            # CSVダウンロード
             today = datetime.date.today().strftime("%Y%m%d")
             csv_data = df.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
