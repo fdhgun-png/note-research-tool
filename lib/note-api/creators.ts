@@ -52,6 +52,8 @@ function normalizeArticle(raw: RawApiData): NoteArticle {
     },
     comment_count: raw.commentCount ?? raw.comment_count ?? 0,
     eyecatch: raw.eyecatch ?? undefined,
+    rater_count: raw.raterCount ?? raw.rater_count ?? 0,
+    is_ratable: raw.isRatable ?? raw.is_ratable ?? false,
   };
 }
 

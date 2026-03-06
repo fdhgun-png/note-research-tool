@@ -107,6 +107,7 @@ export function CompareTab({ results }: Props) {
                   <TableHead className="text-slate-400 text-right">平均スキ数</TableHead>
                   <TableHead className="text-slate-400 text-right">有料記事比率</TableHead>
                   <TableHead className="text-slate-400 text-right">有料記事平均価格</TableHead>
+                  <TableHead className="text-slate-400 text-right">推定最低総収益</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -148,6 +149,11 @@ export function CompareTab({ results }: Props) {
                       </TableCell>
                       <TableCell className="text-right text-emerald-400">
                         {avgPaidPrice > 0 ? `¥${avgPaidPrice.toLocaleString()}` : "-"}
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-orange-400">
+                        {r.analysis.estimatedTotalRevenue > 0
+                          ? `¥${r.analysis.estimatedTotalRevenue.toLocaleString()}`
+                          : "-"}
                       </TableCell>
                     </TableRow>
                   );

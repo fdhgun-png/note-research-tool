@@ -16,6 +16,7 @@ import { DiagnosisCards } from "@/components/dashboard/diagnosis-cards";
 import { ArticlesRankingTable } from "@/components/dashboard/articles-ranking-table";
 import { KeywordCloud } from "@/components/dashboard/keyword-cloud";
 import { CompareTab } from "@/components/dashboard/compare-tab";
+import { TopRatedTable } from "@/components/dashboard/top-rated-table";
 
 import { PriceBarChart } from "@/components/charts/price-bar-chart";
 import { PaidFreePieChart } from "@/components/charts/paid-free-pie-chart";
@@ -104,7 +105,7 @@ export default function Home() {
         {/* ヘッダー */}
         <div className="text-center mb-8">
           <h1 className="text-4xl md:text-5xl font-extrabold text-emerald-500 tracking-tight">
-            noteスパイ
+            note透視くん
           </h1>
           <p className="mt-2 text-slate-400 text-sm md:text-base">
             noteクリエイターの戦略をデータで丸見えに
@@ -301,6 +302,26 @@ export default function Home() {
                     articleCount={currentResult.articles.length}
                   />
 
+                  {currentResult.analysis.estimatedTotalRevenue > 0 && (
+                    <Card className="border-slate-800 bg-slate-900 shadow-sm">
+                      <CardContent className="p-4 md:p-6">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <p className="text-sm text-slate-400">
+                              推定最低総収益（有料記事）
+                            </p>
+                            <p className="text-3xl font-extrabold text-orange-400 mt-1">
+                              ¥{currentResult.analysis.estimatedTotalRevenue.toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              ※ 高評価数 × 2 × 価格で算出（高評価率50%仮定、手数料除く）
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   <Card className="border-slate-800 bg-slate-900 shadow-sm">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base text-slate-200">
@@ -313,6 +334,21 @@ export default function Home() {
                       />
                     </CardContent>
                   </Card>
+
+                  {currentResult.analysis.topRatedArticles.length > 0 && (
+                    <Card className="border-slate-800 bg-slate-900 shadow-sm">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base text-slate-200">
+                          高評価 TOP5 有料記事
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <TopRatedTable
+                          articles={currentResult.analysis.topRatedArticles}
+                        />
+                      </CardContent>
+                    </Card>
+                  )}
 
                   <Card className="border-slate-800 bg-slate-900 shadow-sm">
                     <CardHeader className="pb-2">
@@ -444,7 +480,7 @@ export default function Home() {
         {/* フッター */}
         <Separator className="mt-12 mb-4 bg-slate-800" />
         <footer className="text-center text-xs text-slate-600 pb-4">
-          noteスパイ - noteクリエイターの競合分析ダッシュボード
+          note透視くん - noteクリエイターの競合分析ダッシュボード
         </footer>
       </div>
     </main>

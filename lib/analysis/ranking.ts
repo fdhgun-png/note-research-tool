@@ -12,3 +12,14 @@ export function getTopArticles(
 ): NoteArticle[] {
   return rankArticlesByLikes(articles).slice(0, count);
 }
+
+/** 高評価数TOP N件を返す（有料記事のみ） */
+export function getTopRatedArticles(
+  articles: NoteArticle[],
+  count: number
+): NoteArticle[] {
+  return articles
+    .filter((a) => a.price > 0 && a.rater_count > 0)
+    .sort((a, b) => b.rater_count - a.rater_count)
+    .slice(0, count);
+}

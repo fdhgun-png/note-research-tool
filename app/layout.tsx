@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "noteスパイ - noteクリエイターの競合分析ダッシュボード",
+  title: "note透視くん - noteクリエイターの競合分析ダッシュボード",
   description:
     "noteクリエイターのURLを入力するだけで、スキ数・投稿頻度・価格帯・キーワードをデータで可視化。競合の戦略が丸見えに。",
   openGraph: {
-    title: "noteスパイ - noteクリエイターの競合分析ダッシュボード",
+    title: "note透視くん - noteクリエイターの競合分析ダッシュボード",
     description:
       "noteクリエイターのURLを入力するだけで、スキ数・投稿頻度・価格帯・キーワードをデータで可視化。競合の戦略が丸見えに。",
     type: "website",
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "noteスパイ - noteクリエイターの競合分析ダッシュボード",
+    title: "note透視くん - noteクリエイターの競合分析ダッシュボード",
     description:
       "noteクリエイターのURLを入力するだけで、スキ数・投稿頻度・価格帯・キーワードをデータで可視化。競合の戦略が丸見えに。",
   },

@@ -48,6 +48,17 @@ export interface NoteArticle {
   comment_count: number;
   /** 記事の画像URL */
   eyecatch?: string;
+  /** 高評価した人数（有料記事のみ、v3 notes APIから取得） */
+  rater_count: number;
+  /** 高評価可能な記事かどうか */
+  is_ratable: boolean;
+}
+
+/** 高評価者情報 */
+export interface ContentRater {
+  nickname: string;
+  urlname: string;
+  userProfileImageUrl: string;
 }
 
 /** note API 生レスポンス型 */

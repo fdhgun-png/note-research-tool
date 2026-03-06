@@ -17,7 +17,13 @@ interface Props {
   articles: NoteArticle[];
 }
 
-type SortKey = "like_count" | "publish_at" | "price";
+type SortKey = "like_count" | "publish_at" | "price" | "rater_count" | "revenue";
+
+/** 記事の推定最低収益を算出 */
+function calcRevenue(article: NoteArticle): number {
+  if (article.price <= 0 || article.rater_count <= 0) return 0;
+  return article.rater_count * 2 * article.price;
+}
 
 export function ArticlesRankingTable({ articles }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("like_count");
@@ -32,6 +38,8 @@ export function ArticlesRankingTable({ articles }: Props) {
     if (sortKey === "like_count") return b.like_count - a.like_count;
     if (sortKey === "publish_at")
       return new Date(b.publish_at).getTime() - new Date(a.publish_at).getTime();
+    if (sortKey === "rater_count") return (b.rater_count || 0) - (a.rater_count || 0);
+    if (sortKey === "revenue") return calcRevenue(b) - calcRevenue(a);
     return (b.price || 0) - (a.price || 0);
   });
 
@@ -40,6 +48,8 @@ export function ArticlesRankingTable({ articles }: Props) {
 
   const sortButtons: { key: SortKey; label: string }[] = [
     { key: "like_count", label: "スキ数" },
+    { key: "rater_count", label: "高評価" },
+    { key: "revenue", label: "推定収益" },
     { key: "publish_at", label: "公開日" },
     { key: "price", label: "価格" },
   ];
@@ -78,6 +88,8 @@ export function ArticlesRankingTable({ articles }: Props) {
               <TableHead className="text-slate-400">タイトル</TableHead>
               <TableHead className="text-slate-400 w-28">公開日</TableHead>
               <TableHead className="text-slate-400 w-20 text-right">スキ数</TableHead>
+              <TableHead className="text-slate-400 w-20 text-right">高評価</TableHead>
+              <TableHead className="text-slate-400 w-24 text-right">推定収益</TableHead>
               <TableHead className="text-slate-400 w-20">種別</TableHead>
               <TableHead className="text-slate-400 w-20 text-right">価格</TableHead>
             </TableRow>
@@ -103,6 +115,18 @@ export function ArticlesRankingTable({ articles }: Props) {
                 </TableCell>
                 <TableCell className="text-right font-bold text-emerald-400">
                   {article.like_count.toLocaleString()}
+                </TableCell>
+                <TableCell className="text-right text-amber-400">
+                  {article.price > 0
+                    ? article.rater_count > 0
+                      ? article.rater_count.toLocaleString()
+                      : "0"
+                    : "-"}
+                </TableCell>
+                <TableCell className="text-right text-orange-400 font-medium">
+                  {calcRevenue(article) > 0
+                    ? `¥${calcRevenue(article).toLocaleString()}`
+                    : "-"}
                 </TableCell>
                 <TableCell>
                   {article.price > 0 ? (

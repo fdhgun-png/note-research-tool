@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchCreatorProfile, fetchCreatorArticles } from "@/lib/note-api";
+import { fetchCreatorProfile, fetchCreatorArticles, fetchArticleRaterData } from "@/lib/note-api";
 import {
   rankArticlesByLikes,
   getTopArticles,
+  getTopRatedArticles,
   calcPostingFrequency,
   calcMonthlyPostCount,
   calcPriceDistribution,
@@ -11,6 +12,8 @@ import {
   calcBestPostingDay,
   calcPostingTimeHeatmap,
   generateDiagnosis,
+  estimateCreatorTotalRevenue,
+  getTopRevenueArticles,
 } from "@/lib/analysis";
 import type { UserAnalysisResult } from "@/types/analysis";
 
@@ -42,9 +45,22 @@ export async function POST(request: NextRequest) {
         const profile = await fetchCreatorProfile(username);
         const articles = await fetchCreatorArticles(username);
 
+        // 有料記事の高評価データを個別に取得
+        const paidArticles = articles.filter((a) => a.price > 0);
+        for (const article of paidArticles) {
+          try {
+            const raterData = await fetchArticleRaterData(String(article.key));
+            article.rater_count = raterData.raterCount;
+            article.is_ratable = raterData.isRatable;
+          } catch {
+            // 取得失敗時はデフォルト値のまま
+          }
+        }
+
         // 分析実行
         const ranking = rankArticlesByLikes(articles);
         const topArticles = getTopArticles(articles, 5);
+        const topRatedArticles = getTopRatedArticles(articles, 5);
         const postingFrequency = calcPostingFrequency(articles);
         const monthlyPostCount = calcMonthlyPostCount(articles);
         const priceDistribution = calcPriceDistribution(articles);
@@ -59,6 +75,7 @@ export async function POST(request: NextRequest) {
           articles,
           ranking,
           topArticles,
+          topRatedArticles,
           postingFrequency,
           monthlyPostCount,
           priceDistribution,
@@ -67,8 +84,14 @@ export async function POST(request: NextRequest) {
           bestPostingDay,
           postingTimeHeatmap,
           diagnosis: [],
+          estimatedTotalRevenue: 0,
+          topRevenueArticles: [],
         };
         const diagnosis = generateDiagnosis(diagnosisInput);
+
+        // 推定収益の算出
+        const estimatedTotalRevenue = estimateCreatorTotalRevenue(articles);
+        const topRevenueArticles = getTopRevenueArticles(articles, 5);
 
         results.push({
           profile,
@@ -76,6 +99,7 @@ export async function POST(request: NextRequest) {
           analysis: {
             ranking,
             topArticles,
+            topRatedArticles,
             postingFrequency,
             monthlyPostCount,
             priceDistribution,
@@ -84,6 +108,8 @@ export async function POST(request: NextRequest) {
             bestPostingDay,
             postingTimeHeatmap,
             diagnosis,
+            estimatedTotalRevenue,
+            topRevenueArticles,
           },
         });
       } catch (error) {
@@ -102,6 +128,7 @@ export async function POST(request: NextRequest) {
           analysis: {
             ranking: [],
             topArticles: [],
+            topRatedArticles: [],
             postingFrequency: {},
             monthlyPostCount: [],
             priceDistribution: [],
@@ -110,6 +137,8 @@ export async function POST(request: NextRequest) {
             bestPostingDay: [],
             postingTimeHeatmap: [],
             diagnosis: [],
+            estimatedTotalRevenue: 0,
+            topRevenueArticles: [],
           },
           error:
             error instanceof Error

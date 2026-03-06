@@ -53,6 +53,7 @@ export interface AnalysisData {
   articles: NoteArticle[];
   ranking: NoteArticle[];
   topArticles: NoteArticle[];
+  topRatedArticles: NoteArticle[];
   postingFrequency: Record<string, number>;
   monthlyPostCount: MonthlyCount[];
   priceDistribution: PriceRange[];
@@ -61,6 +62,10 @@ export interface AnalysisData {
   bestPostingDay: DayAvgLikes[];
   postingTimeHeatmap: TimeHeatmapEntry[];
   diagnosis: DiagnosisResult[];
+  /** 推定最低総収益（円） */
+  estimatedTotalRevenue: number;
+  /** 推定収益TOP記事 */
+  topRevenueArticles: NoteArticle[];
 }
 
 /** API レスポンス（1ユーザー分） */
